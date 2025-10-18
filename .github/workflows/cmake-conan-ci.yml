@@ -95,35 +95,66 @@ jobs:
     name: "Prepare tools & Conan"
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
-
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: "Install base tools (apt)"
+      - name: "Diag: who/where"
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ make lcov gcovr python3-pip
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user conan
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          conan --version || true
+          set -x
+          whoami
+          echo "HOME=$HOME"
+          echo "PATH=$PATH"
+          uname -a
+
+      - name: "Check required tools (no sudo)"
+        run: |
+          set -e
+          missing=()
+
+          need() { command -v "$1" >/dev/null 2>&1 || missing+=("$1"); }
+
+          need git
+          need cmake
+          need ninja || need ninja-build
+          need g++
+          need make
+          need lcov
+          need gcovr
+          need python3
+          need pip3
+          # conan проверим отдельно — можем поставить через pip --user
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "❌ Отсутствуют инструменты: ${missing[*]}"
+            echo
+            echo "Установите на хосте раннера (Ubuntu/Debian):"
+            echo "  sudo apt-get update && sudo apt-get install -y git git-lfs cmake ninja-build g++ make lcov gcovr python3-pip"
+            echo
+            echo "Проверьте также, что в PATH есть /usr/local/bin и ~/.local/bin."
+            exit 1
+          fi
+
+          # Git version check (>=2.18)
+          ver=$(git version | awk '{print $3}')
+          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
+            echo "❌ Требуется git >= 2.18. Обновите git на хосте раннера."
+            exit 1
+          fi
+
+          echo "✅ Базовые инструменты найдены."
+
+      - name: "Ensure conan (user install if missing)"
+        run: |
+          set -e
+          if ! command -v conan >/dev/null 2>&1; then
+            echo "Conan не найден — ставлю для текущего пользователя (pip --user)..."
+            python3 -m pip install --upgrade --user pip
+            python3 -m pip install --user conan
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          conan --version
 
       - name: "Validate required secrets"
         run: |
@@ -162,11 +193,6 @@ jobs:
       VERSION: ${{ steps.out.outputs.VERSION }}
       SOFTWARE_VERSION: ${{ steps.out.outputs.SOFTWARE_VERSION }}
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          git --version
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -179,6 +205,7 @@ jobs:
           test -d .git || (echo "NO .git here!" && exit 1)
           git rev-parse --is-inside-work-tree
           git log -1 --oneline
+          git --version
 
       - uses: actions/setup-node@v4
         with:
@@ -197,7 +224,6 @@ jobs:
       - name: "semantic-release --dry-run"
         id: sr
         env:
-          # используем PAT, если задан RELEASE_TOKEN; иначе стандартный GITHUB_TOKEN
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           GH_TOKEN:     ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -206,22 +232,17 @@ jobs:
       - name: "extract VERSION & SOFTWARE_VERSION"
         id: out
         run: |
-          # Семвер из semantic-release (может содержать -prerelease, CMake такое не любит)
           SRV=$(grep -Po '(?<=The next release version is )([0-9]+(\.[0-9]+){2}(?:-[0-9A-Za-z\.-]+)?)' sr.log || true)
-
-          # Для CMake берём только X.Y.Z (отрежем суффикс, если он был)
           if [ -n "$SRV" ]; then
             SEMVER="${SRV%%-*}"
           else
             SEMVER="0.0.0"
           fi
 
-          # SOFTWARE_VERSION = SEMVER-<branch>.<shortsha>
           BR="${GITHUB_REF_NAME}"
           SH="$(echo "${GITHUB_SHA}" | cut -c1-7)"
           SW_VER="${SEMVER}-${BR}.${SH}"
 
-          # Если задан inputs.default_app_version — используем его как SOFTWARE_VERSION (строка как есть)
           if [ -n "${{ inputs.default_app_version }}" ]; then
             SW_VER='${{ inputs.default_app_version }}'
           fi
@@ -237,9 +258,6 @@ jobs:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.SOFTWARE_VERSION }}
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -280,9 +298,6 @@ jobs:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.SOFTWARE_VERSION }}
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -319,9 +334,6 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [build_x86]
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
 
       - name: "Download build_x86"
@@ -329,6 +341,17 @@ jobs:
         with:
           name: build_x86
           path: ${{ env.BUILD_DIR_X86 }}
+
+      - name: "Restore execute permissions for test binaries"
+        run: |
+          set -e
+          if command -v file >/dev/null 2>&1; then
+            find "$BUILD_DIR_X86" -type f -print0 \
+              | xargs -0 -I{} sh -c 'file "{}" | grep -qE "ELF .* (executable|pie executable)" && chmod +x "{}" || true'
+          else
+            # fallback — пометить исполняемыми всё в стандартных тестовых путях
+            find "$BUILD_DIR_X86" -type f -path "*/Tests/*" -o -path "*/tests/*" -exec chmod +x {} +
+          fi
 
       - name: "Run ctest"
         run: |
@@ -346,9 +369,6 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [test]
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
 
       - name: "Download build_x86"
@@ -356,6 +376,14 @@ jobs:
         with:
           name: build_x86
           path: ${{ env.BUILD_DIR_X86 }}
+
+      - name: "Restore execute permissions (coverage)"
+        run: |
+          set -e
+          if command -v file >/dev/null 2>&1; then
+            find "$BUILD_DIR_X86" -type f -print0 \
+              | xargs -0 -I{} sh -c 'file "{}" | grep -qE "ELF .* (executable|pie executable)" && chmod +x "{}" || true'
+          fi
 
       - name: "Collect coverage"
         run: |
@@ -389,9 +417,6 @@ jobs:
       NEXUS_PASS: ${{ secrets.NEXUS_PASS }}
       PKG_NAME: ${{ inputs.pkg_name }}
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
 
       - name: "Ensure profile & create package"
@@ -416,9 +441,6 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [compute_version]
     steps:
-      - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: git --version
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
