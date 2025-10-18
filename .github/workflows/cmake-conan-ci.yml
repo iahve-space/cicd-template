@@ -1,5 +1,10 @@
 name: "CMake+Conan CI (reusable)"
 
+permissions:
+  contents: write
+  pull-requests: write
+  # packages: write
+
 on:
   workflow_call:
     inputs:
@@ -449,6 +454,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          persist-credentials: true   # <— явно оставляем креды для push
 
       - name: "Sanity: ensure repo is a git repo"
         run: |
@@ -457,6 +463,11 @@ jobs:
           test -d .git || (echo "NO .git here!" && exit 1)
           git rev-parse --is-inside-work-tree
           git log -1 --oneline
+
+      - name: "Configure git author"
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - uses: actions/setup-node@v4
         with:
