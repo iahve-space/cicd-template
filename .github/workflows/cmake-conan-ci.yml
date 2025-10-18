@@ -6,18 +6,22 @@ on:
       runner_labels_json:
         description: 'JSON-массив меток раннера'
         required: false
+        type: string
         default: '["self-hosted","Linux","X64"]'
       cmake_build_type:
         description: 'CMAKE_BUILD_TYPE для x86'
         required: false
+        type: string
         default: 'Release'
       conan_remote_name:
         description: 'Имя Conan remote'
         required: false
+        type: string
         default: 'insitech'
       default_app_version:
         description: 'Версия по умолчанию, если semantic-release не дал версию'
         required: false
+        type: string
         default: '0.0.0-${{ github.ref_name }}.${{ github.sha }}'
       pkg_name:
         description: 'Имя Conan пакета (для upload)'
@@ -27,38 +31,53 @@ on:
       do_build_target:
         description: 'Собирать target (ARM и т.п.)'
         required: false
-        default: true
         type: boolean
+        default: true
       do_tests:
         description: 'Запускать ctest'
         required: false
-        default: true
         type: boolean
+        default: true
       do_coverage:
         description: 'Считать покрытие (lcov/gcovr)'
         required: false
-        default: true
         type: boolean
+        default: true
       do_conan_publish:
         description: 'Публиковать пакет в Conan'
         required: false
-        default: false
         type: boolean
+        default: false
       do_semantic_release:
         description: 'Выполнять реальный semantic-release'
         required: false
-        default: false
         type: boolean
+        default: false
 
-      extra_cmake_flags_x86: { required: false, default: '' }
-      extra_cmake_flags_arm: { required: false, default: '' }
-      extra_build_flags_x86: { required: false, default: '' }
-      extra_build_flags_arm: { required: false, default: '' }
+      extra_cmake_flags_x86:
+        required: false
+        type: string
+        default: ''
+      extra_cmake_flags_arm:
+        required: false
+        type: string
+        default: ''
+      extra_build_flags_x86:
+        required: false
+        type: string
+        default: ''
+      extra_build_flags_arm:
+        required: false
+        type: string
+        default: ''
 
     secrets:
-      CONAN_REMOTE_URL: { required: true }
-      NEXUS_USER:       { required: true }
-      NEXUS_PASS:       { required: true }
+      CONAN_REMOTE_URL:
+        required: true
+      NEXUS_USER:
+        required: true
+      NEXUS_PASS:
+        required: true
 
 env:
   BUILD_DIR_X86: build_x86
