@@ -164,11 +164,6 @@ jobs:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
           git --version
 
       - uses: actions/checkout@v4
@@ -200,6 +195,10 @@ jobs:
 
       - name: "semantic-release --dry-run"
         id: sr
+        env:
+          # используем PAT, если задан RELEASE_TOKEN; иначе встроенный GITHUB_TOKEN
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN:     ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           npx semantic-release --dry-run --no-ci 2>&1 | tee sr.log || true
 
@@ -227,14 +226,7 @@ jobs:
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
         with:
@@ -277,14 +269,7 @@ jobs:
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
         with:
@@ -323,14 +308,7 @@ jobs:
     needs: [build_x86]
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
 
@@ -357,14 +335,7 @@ jobs:
     needs: [test]
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
 
@@ -407,14 +378,7 @@ jobs:
       PKG_NAME: ${{ inputs.pkg_name }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
 
@@ -441,20 +405,13 @@ jobs:
     needs: [compute_version]
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
-        run: |
-          set -e
-          if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          git --version
+        run: git --version
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
-          persist-credentials: true   # <— явно оставляем креды для push
+          persist-credentials: true
 
       - name: "Sanity: ensure repo is a git repo"
         run: |
@@ -485,5 +442,7 @@ jobs:
 
       - name: "semantic-release"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # если `RELEASE_TOKEN` задан — используем его, иначе стандартный
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN:     ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: npx semantic-release --no-ci
