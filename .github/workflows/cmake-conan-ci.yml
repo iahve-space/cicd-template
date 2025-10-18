@@ -17,7 +17,7 @@ on:
         description: 'Имя Conan remote'
         required: false
         type: string
-        default: 'insitech'
+        default: 'iahve-space'
       default_app_version:
         description: 'Версия по умолчанию, если semantic-release не дал версию'
         required: false
