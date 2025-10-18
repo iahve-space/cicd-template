@@ -1,55 +1,55 @@
-name: CMake+Conan CI (reusable)
+name: "CMake+Conan CI (reusable)"
 
 on:
   workflow_call:
     inputs:
       runner_labels_json:
-        description: 'JSON-массив меток раннера'
+        description: "JSON-массив меток раннера"
         required: false
         type: string
         default: '["self-hosted","Linux","X64"]'
       cmake_build_type:
-        description: 'CMAKE_BUILD_TYPE для x86'
+        description: "CMAKE_BUILD_TYPE для x86"
         required: false
         type: string
-        default: 'Release'
+        default: "Release"
       conan_remote_name:
-        description: 'Имя Conan remote'
+        description: "Имя Conan remote"
         required: false
         type: string
-        default: 'insitech'
+        default: "insitech"
       default_app_version:
-        description: 'Версия по умолчанию, если semantic-release не дал версию'
+        description: "Версия по умолчанию, если semantic-release не дал версию"
         required: false
         type: string
-        default: '0.0.0-${{ github.ref_name }}.${{ github.sha }}'
+        default: ""
       pkg_name:
-        description: 'Имя Conan пакета (для upload)'
+        description: "Имя Conan пакета (для upload)"
         required: true
         type: string
 
       do_build_target:
-        description: 'Собирать target (ARM и т.п.)'
+        description: "Собирать target (ARM и т.п.)"
         required: false
         type: boolean
         default: true
       do_tests:
-        description: 'Запускать ctest'
+        description: "Запускать ctest"
         required: false
         type: boolean
         default: true
       do_coverage:
-        description: 'Считать покрытие (lcov/gcovr)'
+        description: "Считать покрытие (lcov/gcovr)"
         required: false
         type: boolean
         default: true
       do_conan_publish:
-        description: 'Публиковать пакет в Conan'
+        description: "Публиковать пакет в Conan"
         required: false
         type: boolean
         default: false
       do_semantic_release:
-        description: 'Выполнять реальный semantic-release'
+        description: "Выполнять реальный semantic-release"
         required: false
         type: boolean
         default: false
@@ -57,19 +57,19 @@ on:
       extra_cmake_flags_x86:
         required: false
         type: string
-        default: ''
+        default: ""
       extra_cmake_flags_arm:
         required: false
         type: string
-        default: ''
+        default: ""
       extra_build_flags_x86:
         required: false
         type: string
-        default: ''
+        default: ""
       extra_build_flags_arm:
         required: false
         type: string
-        default: ''
+        default: ""
 
     secrets:
       CONAN_REMOTE_URL:
@@ -90,7 +90,7 @@ jobs:
     name: "Prepare tools & Conan"
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
@@ -156,17 +156,10 @@ jobs:
     outputs:
       VERSION: ${{ steps.out.outputs.VERSION }}
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -178,7 +171,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Sanity: ensure repo is a git repo
+      - name: "Sanity: ensure repo is a git repo"
         run: |
           pwd
           ls -la
@@ -190,7 +183,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: npm ci (no husky)
+      - name: "npm ci (no husky)"
         env:
           HUSKY: "0"
         run: |
@@ -200,17 +193,23 @@ jobs:
             npm i --no-audit --no-fund --prefer-offline
           fi
 
-      - name: semantic-release --dry-run
+      - name: "semantic-release --dry-run"
         id: sr
         run: |
           npx semantic-release --dry-run --no-ci 2>&1 | tee sr.log || true
 
-      - name: extract VERSION
+      - name: "extract VERSION"
         id: out
+        env:
+          FALLBACK_VER: "0.0.0-${GITHUB_REF_NAME}.${GITHUB_SHA}"
         run: |
           VERSION=$(grep -Po '(?<=The next release version is )([0-9]+(\.[0-9]+){2}(?:-[0-9A-Za-z\.-]+)?)' sr.log || true)
           if [ -z "$VERSION" ]; then
-            VERSION="${{ inputs.default_app_version }}"
+            if [ -n "${{ inputs.default_app_version }}" ]; then
+              VERSION='${{ inputs.default_app_version }}'
+            else
+              VERSION="$FALLBACK_VER"
+            fi
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -222,17 +221,10 @@ jobs:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -279,17 +271,10 @@ jobs:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
       SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -332,17 +317,10 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [build_x86]
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -373,17 +351,10 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [test]
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -430,17 +401,10 @@ jobs:
       NEXUS_PASS: ${{ secrets.NEXUS_PASS }}
       PKG_NAME: ${{ inputs.pkg_name }}
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -471,17 +435,10 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     needs: [compute_version]
     steps:
-      - name: Ensure Git ≥ 2.18 (and Git LFS)
+      - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
           set -e
           if ! command -v git >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y git git-lfs
-            git lfs install --system || true
-          fi
-          ver=$(git version | awk '{print $3}')
-          major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
-          if [ "$major" -lt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -lt 18 ]; }; then
             sudo apt-get update
             sudo apt-get install -y git git-lfs
             git lfs install --system || true
@@ -493,7 +450,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Sanity: ensure repo is a git repo
+      - name: "Sanity: ensure repo is a git repo"
         run: |
           pwd
           ls -la
@@ -505,7 +462,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: npm ci (no husky)
+      - name: "npm ci (no husky)"
         env:
           HUSKY: "0"
         run: |
@@ -515,7 +472,7 @@ jobs:
             npm i --no-audit --no-fund --prefer-offline
           fi
 
-      - name: semantic-release
+      - name: "semantic-release"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release --no-ci
