@@ -24,7 +24,7 @@ on:
         type: string
         default: "insitech"
       default_app_version:
-        description: "Версия по умолчанию, если semantic-release не дал версию"
+        description: "Версия по умолчанию, если semantic-release не дал версию (строка)"
         required: false
         type: string
         default: ""
@@ -160,6 +160,7 @@ jobs:
     needs: [check_env_vars]
     outputs:
       VERSION: ${{ steps.out.outputs.VERSION }}
+      SOFTWARE_VERSION: ${{ steps.out.outputs.SOFTWARE_VERSION }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: |
@@ -196,26 +197,37 @@ jobs:
       - name: "semantic-release --dry-run"
         id: sr
         env:
-          # используем PAT, если задан RELEASE_TOKEN; иначе встроенный GITHUB_TOKEN
+          # используем PAT, если задан RELEASE_TOKEN; иначе стандартный GITHUB_TOKEN
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           GH_TOKEN:     ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           npx semantic-release --dry-run --no-ci 2>&1 | tee sr.log || true
 
-      - name: "extract VERSION"
+      - name: "extract VERSION & SOFTWARE_VERSION"
         id: out
-        env:
-          FALLBACK_VER: "0.0.0-${GITHUB_REF_NAME}.${GITHUB_SHA}"
         run: |
-          VERSION=$(grep -Po '(?<=The next release version is )([0-9]+(\.[0-9]+){2}(?:-[0-9A-Za-z\.-]+)?)' sr.log || true)
-          if [ -z "$VERSION" ]; then
-            if [ -n "${{ inputs.default_app_version }}" ]; then
-              VERSION='${{ inputs.default_app_version }}'
-            else
-              VERSION="$FALLBACK_VER"
-            fi
+          # Семвер из semantic-release (может содержать -prerelease, CMake такое не любит)
+          SRV=$(grep -Po '(?<=The next release version is )([0-9]+(\.[0-9]+){2}(?:-[0-9A-Za-z\.-]+)?)' sr.log || true)
+
+          # Для CMake берём только X.Y.Z (отрежем суффикс, если он был)
+          if [ -n "$SRV" ]; then
+            SEMVER="${SRV%%-*}"
+          else
+            SEMVER="0.0.0"
           fi
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # SOFTWARE_VERSION = SEMVER-<branch>.<shortsha>
+          BR="${GITHUB_REF_NAME}"
+          SH="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          SW_VER="${SEMVER}-${BR}.${SH}"
+
+          # Если задан inputs.default_app_version — используем его как SOFTWARE_VERSION (строка как есть)
+          if [ -n "${{ inputs.default_app_version }}" ]; then
+            SW_VER='${{ inputs.default_app_version }}'
+          fi
+
+          echo "VERSION=$SEMVER" >> "$GITHUB_OUTPUT"
+          echo "SOFTWARE_VERSION=$SW_VER" >> "$GITHUB_OUTPUT"
 
   build_x86:
     name: "Build x86"
@@ -223,7 +235,7 @@ jobs:
     needs: [check_env_vars, compute_version]
     env:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
-      SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
+      SOFTWARE_VERSION: ${{ needs.compute_version.outputs.SOFTWARE_VERSION }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: git --version
@@ -266,7 +278,7 @@ jobs:
     needs: [check_env_vars, compute_version]
     env:
       PROJECT_SEMVER: ${{ needs.compute_version.outputs.VERSION }}
-      SOFTWARE_VERSION: ${{ needs.compute_version.outputs.VERSION }}
+      SOFTWARE_VERSION: ${{ needs.compute_version.outputs.SOFTWARE_VERSION }}
     steps:
       - name: "Ensure Git >= 2.18 (and Git LFS)"
         run: git --version
@@ -442,7 +454,6 @@ jobs:
 
       - name: "semantic-release"
         env:
-          # если `RELEASE_TOKEN` задан — используем его, иначе стандартный
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           GH_TOKEN:     ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         run: npx semantic-release --no-ci
